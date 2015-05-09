@@ -1,0 +1,107 @@
+#!/usr/bin/python
+import sys, os, subprocess, re
+
+LINE_PREFIX = "//% "
+HEADER_LINE_PREFIX = "//#"
+INSTR_SIGNAL_REGEX = "_moocov_signal\(.*?\)" # pattern: $
+INSTR_LINK_REGEX = "_moocov_link\(.*?\)" # pattern: @
+
+def getInstrumented(sourcePath, args):
+	try:
+		output = subprocess.check_output([ "moocov-instrument", sourcePath, "-o=-", "--omit-maps", "--auto-dump=false", "--" ] + args)
+		# TODO: cut out only the instrumented output for sourcePath
+		#print output
+		return output.split('\n')
+	except subprocess.CalledProcessError as e:
+		sys.stderr.write("Instrumentation failed with error code " + str(e.returncode) + "!\n")
+		return None
+
+def main(args):
+	sourcePath = args[1]
+
+	# read source file
+	sourceLines = None
+	with open(sourcePath) as f:
+		sourceLines = f.readlines()
+
+	# execute the instrumentation and get its output
+	instrLines = getInstrumented(sourcePath, args[2 :])
+	if instrLines == None:
+		return 1 # instrumentation failed
+
+	sourceIndex = 0
+	sourceLen = len(sourceLines)
+
+	# append an empty line to the end of the source lines, without including it in the line count
+	# this makes it safe to always add + 1 to the index in the loop
+	sourceLines.append("")
+
+	instrLen = len(instrLines)
+
+	# skip to the relevant part of the output
+	# we skip until we find the line that goes like:
+	# $$File: <sourcePath>
+	# after that, there's another empty line, and after that starts the content
+	# TODO: this is really ugly
+	instrIndex = 0
+	while instrIndex < instrLen and not (sourcePath in instrLines[instrIndex]):
+		instrIndex += 1
+
+	if instrIndex == instrLen:
+		sys.stderr.write("No instrumentation has been done on the source file!\n")
+		return 4
+
+	instrIndex += 2
+
+	# now skip the instrumentation header, if any
+	while not instrLines[instrIndex].startswith("// RUN:"):
+		instrIndex += 1
+
+	# now match the source file to the instrumentation
+	while sourceIndex < sourceLen and instrIndex < instrLen:
+		if sourceLines[sourceIndex].startswith("#include") and sourceLines[sourceIndex + 1].startswith(HEADER_LINE_PREFIX):
+			# indicates a header file that was supposed to be instrumented, and so the #include line replaced
+			# we don't actually check anything here, just ignore the line
+			sourceIndex += 2
+			instrIndex += 2
+		elif sourceLines[sourceIndex + 1].lstrip().startswith(LINE_PREFIX):
+			# pattern-match
+			sourceLine = sourceLines[sourceIndex + 1]
+			wsEndIndex = sourceLine.find(LINE_PREFIX)
+			userPattern = sourceLine[: wsEndIndex] + sourceLine[wsEndIndex + len(LINE_PREFIX) :].rstrip()
+
+			#userPattern = sourceLines[sourceIndex + 1][len(LINE_PREFIX) :].rstrip()
+			pattern = re.escape(userPattern) \
+				.replace("\@", INSTR_LINK_REGEX) \
+				.replace("\$", INSTR_SIGNAL_REGEX)
+			m = re.match(pattern, instrLines[instrIndex])
+			if not m:
+				sys.stderr.write("Instrumentation mismatch in line " + str(sourceIndex + 1) + " (pattern defined in line " + str(sourceIndex + 2) + "):\n")
+				sys.stderr.write(" - Pattern: " + userPattern + "\n")
+				sys.stderr.write(" - Got: " + instrLines[instrIndex] + "\n")
+				return 3
+
+			sourceIndex += 2
+			instrIndex += 2
+		else:
+			# check the line for whole match
+			sourceLine = sourceLines[sourceIndex].rstrip()
+			if sourceLine != instrLines[instrIndex]:
+				sys.stderr.write("Unexpected instrumentation in line " + str(sourceIndex + 1) + ":\n")
+				sys.stderr.write(" - Expected: " + sourceLine + "\n")
+				sys.stderr.write(" - Got: " + instrLines[instrIndex] + "\n")
+				return 2
+
+			sourceIndex += 1
+			instrIndex += 1
+
+	# check for early termination
+	if instrIndex >= instrLen and sourceIndex < sourceLen:
+		sys.stderr.write("Instrumented output terminated early, no matching line for source line " + str(sourceIndex + 1) + ":\n")
+		sys.stderr.write(sourceLines[sourceIndex].rstrip() + "\n")
+		return 5
+
+	return 0
+
+if __name__ == "__main__":
+	sys.exit(main(sys.argv))

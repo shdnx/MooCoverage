@@ -1,0 +1,4 @@
+set(SOURCES
+		src/main.cpp
+		src/GcovWriter.cpp
+)

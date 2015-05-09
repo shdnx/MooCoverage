@@ -1,0 +1,4 @@
+config.moocov_source_dir = "@MOOCOV_SOURCE_DIR@"
+config.moocov_build_dir = "@MOOCOV_BUILD_DIR@"
+
+lit_config.load_config(config, "@MOOCOV_SOURCE_DIR@/test/lit.cfg")

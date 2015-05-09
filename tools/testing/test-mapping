@@ -1,0 +1,119 @@
+#!/usr/bin/python
+import os, sys, subprocess
+
+MARKER = '$'
+SKIP_LINES = 5
+
+def parseHexInt(str):
+	n = 0
+	for c in reversed(str):
+		if c.isdigit():
+			n = n * 16 + (ord(c) - ord('0'))
+		else:
+			assert c in "ABCDEF"
+			n = n * 16 + 10 + (ord(c) - ord('A'))
+	return n
+
+def parseMap(lines):
+	data = {}
+	for line in lines[SKIP_LINES :]:
+		line = line.rstrip()
+		if line == '':
+			continue
+
+		parts = line.split(' ')
+		data[parseHexInt(parts[0])] = (
+			parseHexInt(parts[1]), # start line
+			parseHexInt(parts[2]), # start column
+			parseHexInt(parts[3]), # end line
+			parseHexInt(parts[4]) # end column
+		)
+	return data
+
+def getMap(sourcePath):
+	try:
+		output = subprocess.check_output([ "moocov-instrument", sourcePath, "-m=-", "--omit-sources", "--auto-dump=false", "--" ])
+		print output
+		return parseMap(output.split('\n'))
+	except subprocess.CalledProcessError as e:
+		sys.stderr.write("Instrumentation failed with error code " + str(e.returncode) + "!\n")
+		return None
+
+def transformFile(path, outputPath):
+	mappings = {} # id => (startLine, startCol, endLine, endCol)
+
+	lines = None
+	with open(path) as f:
+		lines = f.readlines()
+
+	with open(outputPath, 'w') as of:
+		lineNum = 1
+		colNum = 1
+
+		readMarker = False
+		for line in lines:
+			for c in line:
+				if readMarker:
+					if c in mappings:
+						(startLine, startCol, _, __) = mappings[c]
+						mappings[c] = (startLine, startCol, lineNum, colNum)
+					else:
+						mappings[c] = (lineNum, colNum, 0, 0)
+					readMarker = False
+				elif c == MARKER:
+					readMarker = True
+				else:
+					of.write(c)
+					colNum += 1
+
+			lineNum += 1
+			colNum = 1
+
+	return mappings
+
+def main(args):
+	sourcePath = args[1]
+	tmpPath = args[2]
+
+	markers = transformFile(sourcePath, tmpPath)
+
+	mappings = getMap(tmpPath)
+	if mappings == None:
+		return 1
+
+	success = True
+	for sigID, (startLine, startCol, endLine, endCol) in mappings.items():
+		foundMatch = False
+		for markerID, (markedStartLine, markedStartCol, markedEndLine, markedEndCol) in markers.items():
+			if markedEndLine == 0:
+				sys.stderr.write('Unmatched marking in line ' + str(markedStartLine) + ' in column ' + str(markedStartCol) + '!\n')
+				del markers[markerID]
+				success = False
+				continue
+
+			if startLine == markedStartLine and startCol == markedStartCol:
+				if endLine != markedEndLine:
+					sys.stderr.write('Marker "' + markerID + '" (signal ' + str(sigID) + ') was expected to end in line ' + str(markedEndLine) + ' and column ' + str(markedEndCol) + ', but ended in line ' + str(endLine) + ' and column ' + str(endCol) + '!\n')
+					success = False
+				elif endCol != markedEndCol:
+					sys.stderr.write('Marker "' + markerID + '" (signal ' + str(sigID) + ') was expected to end in column ' + str(markedEndCol) + ', but ended in ' + str(endCol) + '!\n')
+					success = False
+
+				foundMatch = True
+				del mappings[sigID]
+				del markers[markerID]
+
+		if not foundMatch:
+			sys.stderr.write('Could not find marker for signal ' + str(sigID) + ', starting in line ' + str(startLine) + ' and column ' + str(startCol) + ' and ending in line ' + str(endLine) + ' and column ' + str(endCol) + '\n')
+			success = False
+
+	for markerID, (markedStartLine, markedStartCol, markedEndLine, markedEndCol) in markers.iteritems():
+		sys.stderr.write('No signal matched for marker "' + markerID + '", starting in line ' + str(markedStartLine) + ' and column ' + str(markedStartCol) + ' and ending in line ' + str(markedEndLine) + ' and column ' + str(markedEndCol) + '\n')
+
+	if success:
+		return 0
+	else:
+		return 1
+
+if __name__ == "__main__":
+	sys.exit(main(sys.argv))

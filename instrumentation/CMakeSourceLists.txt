@@ -1,0 +1,11 @@
+set(SOURCES
+	src/main.cpp
+	src/Block.cpp
+	src/ASTInstrumentator.cpp
+	src/FileInstrumentation.cpp
+	src/InstrumentationOptions.cpp
+	src/SignalRegistry.cpp
+	src/utils/SourceFileRef.cpp
+	src/utils/lexutils.cpp
+	src/utils/fastint.cpp
+)

@@ -1,0 +1,24 @@
+Index: lib/Parse/Parser.cpp
+===================================================================
+--- lib/Parse/Parser.cpp	(revision 233092)
++++ lib/Parse/Parser.cpp	(working copy)
+@@ -65,8 +65,8 @@
+   // destructor.
+   initializePragmaHandlers();
+ 
+-  CommentSemaHandler.reset(new ActionCommentHandler(actions));
+-  PP.addCommentHandler(CommentSemaHandler.get());
++  //CommentSemaHandler.reset(new ActionCommentHandler(actions));
++  //PP.addCommentHandler(CommentSemaHandler.get());
+ 
+   PP.setCodeCompletionHandler(*this);
+ }
+@@ -410,7 +410,7 @@
+ 
+   resetPragmaHandlers();
+ 
+-  PP.removeCommentHandler(CommentSemaHandler.get());
++  //PP.removeCommentHandler(CommentSemaHandler.get());
+ 
+   PP.clearCodeCompletionHandler();
+ 

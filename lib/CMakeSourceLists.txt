@@ -1,0 +1,5 @@
+set(SOURCES
+	src/CoverageData.cpp
+	src/CoverageMap.cpp
+	src/LineCoverage.cpp
+)

@@ -1,0 +1,7 @@
+#!/bin/bash
+
+rt="$MOOCOV_RUNTIME_ROOT"
+args="$@"
+
+gcc -std=c11 -c "$rt/src/runtime.c" -I"$rt/include" $args
+exit $?

@@ -1,0 +1,126 @@
+#!/usr/bin/python
+import os, sys, subprocess, glob, re
+
+DATAFILE_EXT = '.mocd'
+
+def execInstrumented(cmd, workingDir):
+	result = subprocess.call(cmd, cwd = workingDir)
+	if result != 0:
+		sys.stderr.write('Instrumented executable failed, exit code: ' + str(result) + '\n')
+		return False
+
+	return True
+
+def parseHexInt(str):
+	n = 0
+	for c in reversed(str):
+		if c.isdigit():
+			n = n * 16 + (ord(c) - ord('0'))
+		else:
+			assert c in "ABCDEF"
+			n = n * 16 + 10 + (ord(c) - ord('A'))
+	return n
+
+# Reads the given file, skipping the first line. For each line, interpret the first and second word as integer and return it as a tuple.
+def parseData(path):
+	lines = None
+	with open(path) as f:
+		lines = f.readlines()
+
+	data = []
+	for line in lines[1 :]:
+		line = line.rstrip()
+
+		if line != "":
+			parts = line.split(' ')
+
+			if len(parts) >= 2:
+				data.append((parseHexInt(parts[0]), parseHexInt(parts[1])))
+
+	return data
+
+# Find and parse all coverage data files.
+def gatherData(dir):
+	data = {}
+
+	# find all .mocd files in the cwd
+	for path in glob.glob(dir + '/*' + DATAFILE_EXT):
+		d = dict(parseData(path))
+
+		# accummulate the hit counts
+		for key in d:
+			if key in data:
+				data[key] += d[key]
+			else:
+				data[key] = d[key]
+
+	return data
+
+def dumpMap(mapData):
+	sys.stdout.write("\nSignals:\n")
+	for key in mapData:
+		sys.stdout.write("Line " + str(key) + ": signal #" + str(mapData[key]) + "\n")
+
+def dumpCoverage(covData):
+	sys.stdout.write("\nHit lines:\n")
+	for key in covData:
+		sys.stdout.write("#" + str(key) + ": " + str(covData[key]) + " hits\n")
+
+def main(args):
+	sourceFile = args[1]
+	workDir = args[2]
+	cmd = args[4 :]
+
+	if not execInstrumented(cmd, workDir):
+		return 5
+
+	# maps lines to signal IDs
+	mapFile = os.path.join(workDir, os.path.basename(sourceFile)) + '.mocm'
+	mapData = dict(map(lambda (signal, line): (line, signal), parseData(mapFile)))
+
+	coverageData = gatherData(workDir)
+
+	sourceLines = None
+	with open(sourceFile) as f:
+		sourceLines = f.readlines()
+
+	lineNum = 1
+	for line in sourceLines:
+		m = re.search('// TAKEN(: ([0-9]+))?$', line.rstrip())
+		if m:
+			if lineNum not in mapData:
+				dumpMap(mapData)
+				sys.stderr.write('Line ' + str(lineNum) + ': annotation does not correspond to a signal start line!\n')
+				return 1
+
+			signalID = mapData[lineNum]
+
+			hitCount = m.group(2)
+			if hitCount == '0':
+				if signalID in coverageData:
+					sys.stderr.write('Line ' + str(lineNum) + ': signal #' + str(signalID) + ' was expected to be not hit, but was, ' + str(coverageData[signalID]) + ' time(s)!\n')
+					return 2
+			else:
+				if signalID not in coverageData:
+					dumpMap(mapData)
+					dumpCoverage(coverageData)
+
+					if hitCount == None:
+						sys.stderr.write('Line ' + str(lineNum) + ': signal #' + str(signalID) + ' was expected to be hit, but was not!\n')
+					else:
+						sys.stderr.write('Line ' + str(lineNum) + ': signal #' + str(signalID) + ' was expected to be hit ' + hitCount + ' time(s), but was not!\n')
+					return 3
+
+				if hitCount != None and int(hitCount) != coverageData[signalID]:
+					dumpMap(mapData)
+					dumpCoverage(coverageData)
+
+					sys.stderr.write('Line ' + str(lineNum) + ': signal #' + str(signalID) + ' expected hit count (' + hitCount + ') not matched: got ' + str(coverageData[signalID]) + '\n')
+					return 4
+
+		lineNum += 1
+
+	return 0
+
+if __name__ == "__main__":
+	sys.exit(main(sys.argv))

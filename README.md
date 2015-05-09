@@ -16,7 +16,7 @@ MooCoverage is a simple source-code instrumentation tool for C/C++, primarily ta
 
 MooCoverage is based on [LLVM](http://llvm.org) and [Clang](http://clang.llvm.org) version 3.7 (note that Clang 3.6 needs to be patched with *clang36_patch.diff*). It uses Clang to parse the source code to be instrumented and build an AST - then it performs the instrumentation based on the AST. It also uses some LLVM libraries, most notably for command line handling.
 
-If you read Hungarian, the best resource for getting acquainted with the project is reading my [BSc thesis](http://gaborkozar.me/szakdolgozat.pdf).
+If you read Hungarian, the best resource for getting acquainted with the project is reading my [BSc thesis](https://dl.dropboxusercontent.com/u/17147594/szakdolgozat.pdf).
 
 The project uses the MIT license: you can do whatever you wish with it, so long as you don't hold me liable and you give credit where credit is due.
 

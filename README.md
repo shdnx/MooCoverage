@@ -18,6 +18,8 @@ MooCoverage is based on [LLVM](http://llvm.org) and [Clang](http://clang.llvm.or
 
 If you read Hungarian, the best resource for getting acquainted with the project is reading my [BSc thesis](http://gaborkozar.me/szakdolgozat.pdf).
 
+The project uses the MIT license: you can do whatever you wish with it, so long as you don't hold me liable and you give credit where credit is due.
+
 Configuration and building
 --------------------------------------------------------------
 
